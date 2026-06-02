@@ -1,0 +1,112 @@
+---
+- name: Wait for PostgreSQL to be ready
+  shell: docker exec silver_postgres pg_isready -U mobilis_admin -d mobilis_soc
+  register: pg_check
+  retries: 20
+  delay: 5
+  until: pg_check.rc == 0
+  become_user: vboxuser
+
+- name: Create predictions table
+  shell: |
+    docker exec silver_postgres psql -U mobilis_admin -d mobilis_soc -c "
+    CREATE TABLE IF NOT EXISTS predictions (
+      id SERIAL PRIMARY KEY,
+      timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      src_ip VARCHAR(50), dst_ip VARCHAR(50), dst_port VARCHAR(10),
+      protocol VARCHAR(10), prediction VARCHAR(20), severity VARCHAR(10),
+      anomaly_score FLOAT, ai_threshold FLOAT,
+      shap_top5 JSONB, raw_features JSONB
+    );"
+  become_user: vboxuser
+
+- name: Create suricata_alerts table
+  shell: |
+    docker exec silver_postgres psql -U mobilis_admin -d mobilis_soc -c "
+    CREATE TABLE IF NOT EXISTS suricata_alerts (
+      id SERIAL PRIMARY KEY,
+      timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      src_ip VARCHAR(50), dst_ip VARCHAR(50), dst_port INTEGER,
+      protocol VARCHAR(10), rule_id INTEGER, signature TEXT,
+      severity INTEGER, category VARCHAR(100), raw_alert JSONB
+    );"
+  become_user: vboxuser
+
+- name: Create honeypot_alerts table
+  shell: |
+    docker exec silver_postgres psql -U mobilis_admin -d mobilis_soc -c "
+    CREATE TABLE IF NOT EXISTS honeypot_alerts (
+      id SERIAL PRIMARY KEY,
+      timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      src_ip VARCHAR(50), src_port INTEGER,
+      username VARCHAR(100), password VARCHAR(100),
+      event_type VARCHAR(50), command TEXT,
+      session_id VARCHAR(100), auto_blocked BOOLEAN DEFAULT FALSE
+    );"
+  become_user: vboxuser
+
+- name: Create soar_actions table
+  shell: |
+    docker exec silver_postgres psql -U mobilis_admin -d mobilis_soc -c "
+    CREATE TABLE IF NOT EXISTS soar_actions (
+      id SERIAL PRIMARY KEY,
+      timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      src_ip VARCHAR(50), action VARCHAR(50), reason VARCHAR(200),
+      ai_score FLOAT, abuseipdb_score INTEGER,
+      suricata_fired BOOLEAN, ueba_fired BOOLEAN, honeypot_fired BOOLEAN,
+      telegram_sent BOOLEAN DEFAULT FALSE,
+      firewall_blocked BOOLEAN DEFAULT FALSE
+    );"
+  become_user: vboxuser
+
+- name: Create blocked_ips table
+  shell: |
+    docker exec silver_postgres psql -U mobilis_admin -d mobilis_soc -c "
+    CREATE TABLE IF NOT EXISTS blocked_ips (
+      id SERIAL PRIMARY KEY,
+      ip_address VARCHAR(50) UNIQUE,
+      blocked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      block_type VARCHAR(20), reason TEXT,
+      auto_unblock_at TIMESTAMP,
+      unblocked BOOLEAN DEFAULT FALSE
+    );"
+  become_user: vboxuser
+
+- name: Create ueba_alerts table
+  shell: |
+    docker exec silver_postgres psql -U mobilis_admin -d mobilis_soc -c "
+    CREATE TABLE IF NOT EXISTS ueba_alerts (
+      id SERIAL PRIMARY KEY,
+      timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      src_ip VARCHAR(50), alert_type VARCHAR(50),
+      description TEXT, baseline_value TEXT,
+      observed_value TEXT, severity VARCHAR(20)
+    );"
+  become_user: vboxuser
+
+- name: Create Kafka topics
+  shell: |
+    docker exec silver_kafka kafka-topics --create \
+      --bootstrap-server localhost:9092 \
+      --topic {{ item }} \
+      --partitions 1 \
+      --replication-factor 1 \
+      --if-not-exists
+  loop:
+    - network-traffic
+    - suricata-alerts
+    - honeypot-alerts
+    - ai-predictions
+    - ueba-alerts
+    - threat-intel
+    - soar-actions
+  become_user: vboxuser
+
+- name: Verify Kafka topics created
+  shell: docker exec silver_kafka kafka-topics --list --bootstrap-server localhost:9092
+  register: kafka_topics
+  become_user: vboxuser
+
+- name: Show Kafka topics
+  debug:
+    var: kafka_topics.stdout_lines

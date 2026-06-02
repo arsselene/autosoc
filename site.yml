@@ -8,3 +8,4 @@
   roles:
     - system_baseline
     - docker_stack
+    - silver_soc_core
