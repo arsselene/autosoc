@@ -4,3 +4,6 @@ vault.yml
 *.log
 __pycache__/
 *.pyc
+roles/docker_stack/files/suricata/logs/
+roles/docker_stack/files/**/logs/
+*.json
