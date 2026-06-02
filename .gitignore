@@ -1,0 +1,6 @@
+vault.yml
+.env
+*.retry
+*.log
+__pycache__/
+*.pyc

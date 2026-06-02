@@ -1,0 +1,20 @@
+---
+# Silver SOC configuration
+silver_soc_dir: /opt/silver_soc
+silver_user: silver_soc
+docker_compose_version: "2.24.0"
+
+# AI Engine thresholds
+ai_threshold_normal: "-0.10"
+ai_threshold_zeroday: "-0.13"
+
+# PostgreSQL
+postgres_db: mobilis_soc
+postgres_user: mobilis_admin
+postgres_password: "Mob1l1s@SOC2025"
+
+# Redis
+redis_password: "R3d1s@SOC2025"
+
+# Kafka
+kafka_bootstrap: "kafka:29092"

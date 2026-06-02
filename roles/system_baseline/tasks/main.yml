@@ -1,0 +1,80 @@
+---
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install system dependencies
+  apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg
+      - git
+      - python3
+      - python3-pip
+      - ufw
+      - net-tools
+    state: present
+
+- name: Set vm.max_map_count for Kafka
+  sysctl:
+    name: vm.max_map_count
+    value: '262144'
+    state: present
+    reload: yes
+
+- name: Create silver_soc directory
+  file:
+    path: "{{ silver_soc_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: Allow SSH through firewall
+  ufw:
+    rule: allow
+    port: '22'
+    proto: tcp
+
+- name: Allow dashboard port
+  ufw:
+    rule: allow
+    port: '8080'
+    proto: tcp
+
+- name: Allow AI engine port
+  ufw:
+    rule: allow
+    port: '8001'
+    proto: tcp
+
+- name: Allow Grafana port
+  ufw:
+    rule: allow
+    port: '3000'
+    proto: tcp
+
+- name: Enable UFW firewall
+  ufw:
+    state: enabled
+    policy: deny
+
+- name: Install Docker
+  apt:
+    name:
+      - docker.io
+      - docker-compose-v2
+    state: present
+
+- name: Start and enable Docker service
+  systemd:
+    name: docker
+    state: started
+    enabled: yes
+
+- name: Add vboxuser to docker group
+  user:
+    name: vboxuser
+    groups: docker
+    append: yes
