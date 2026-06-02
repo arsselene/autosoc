@@ -7,11 +7,27 @@
     owner: vboxuser
     group: vboxuser
 
-- name: Copy docker-compose.yml to server
+- name: Copy docker-compose.yml
   copy:
     src: docker-compose.yml
     dest: /opt/silver_soc/docker-compose.yml
     mode: '0644'
+
+- name: Copy all Silver SOC service folders
+  copy:
+    src: "{{ item }}"
+    dest: /opt/silver_soc/
+    mode: preserve
+  loop:
+    - ai_engine
+    - intel
+    - retrainer
+    - soar
+    - ueba
+    - honeypot
+    - suricata
+    - dashboard
+    - db
 
 - name: Generate .env file from vault secrets
   template:
@@ -24,27 +40,27 @@
   become_user: vboxuser
   shell: |
     cd /opt/silver_soc
-    docker compose up -d
+    docker compose up -d --build
   args:
     executable: /bin/bash
-
-- name: Wait 30 seconds for services to start
-  wait_for:
-    timeout: 30
+  async: 900
+  poll: 30
 
 - name: Wait for PostgreSQL to be healthy
   shell: docker exec silver_postgres pg_isready -U mobilis_admin -d mobilis_soc
   register: pg_ready
-  retries: 15
-  delay: 5
+  retries: 20
+  delay: 10
   until: pg_ready.rc == 0
+  become_user: vboxuser
 
 - name: Wait for Redis to be healthy
   shell: docker exec silver_redis redis-cli -a R3d1s@SOC2025 ping
   register: redis_ready
   retries: 10
-  delay: 3
+  delay: 5
   until: "'PONG' in redis_ready.stdout"
+  become_user: vboxuser
 
 - name: Show running containers
   shell: docker ps --format "table {% raw %}{{.Names}}\t{{.Status}}{% endraw %}"
