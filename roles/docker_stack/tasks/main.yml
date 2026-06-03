@@ -12,12 +12,13 @@
     owner: vboxuser
     group: vboxuser
 
-- name: Clone Silver SOC from GitHub
+- name: Clone or update Silver SOC from GitHub
   git:
     repo: https://github.com/arsselene/silver-soc.git
     dest: /opt/silver_soc
     version: main
     force: yes
+    update: yes
   become_user: vboxuser
 
 - name: Generate .env file from vault secrets
