@@ -1,4 +1,0 @@
-confluent-kafka
-redis
-requests
-psycopg2-binary

@@ -1,4 +1,9 @@
 ---
+- name: Install git on target server
+  apt:
+    name: git
+    state: present
+
 - name: Create Silver SOC directory
   file:
     path: /opt/silver_soc
@@ -7,27 +12,13 @@
     owner: vboxuser
     group: vboxuser
 
-- name: Copy docker-compose.yml
-  copy:
-    src: docker-compose.yml
-    dest: /opt/silver_soc/docker-compose.yml
-    mode: '0644'
-
-- name: Copy all Silver SOC service folders
-  copy:
-    src: "{{ item }}"
-    dest: /opt/silver_soc/
-    mode: preserve
-  loop:
-    - ai_engine
-    - intel
-    - retrainer
-    - soar
-    - ueba
-    - honeypot
-    - suricata
-    - dashboard
-    - db
+- name: Clone Silver SOC from GitHub
+  git:
+    repo: https://github.com/arsselene/silver-soc.git
+    dest: /opt/silver_soc
+    version: main
+    force: yes
+  become_user: vboxuser
 
 - name: Generate .env file from vault secrets
   template:
@@ -36,7 +27,7 @@
     mode: '0600'
     owner: vboxuser
 
-- name: Start Silver SOC stack
+- name: Build and start Silver SOC stack
   become_user: vboxuser
   shell: |
     cd /opt/silver_soc
@@ -63,7 +54,8 @@
   become_user: vboxuser
 
 - name: Show running containers
-  shell: docker ps --format "table {% raw %}{{.Names}}\t{{.Status}}{% endraw %}"
+  shell: |
+    docker ps --format "table {% raw %}{{.Names}}\t{{.Status}}{% endraw %}"
   register: containers
   become_user: vboxuser
 
