@@ -1,0 +1,53 @@
+---
+- name: Create models directory on server
+  file:
+    path: /opt/silver_soc/ai_engine/models
+    state: directory
+    mode: '0755'
+    owner: vboxuser
+    group: vboxuser
+
+- name: Copy Isolation Forest model files
+  copy:
+    src: "models/{{ item }}"
+    dest: /opt/silver_soc/ai_engine/models/{{ item }}
+    owner: vboxuser
+    mode: '0644'
+  loop:
+    - mobilis_v4_model.pkl
+    - mobilis_v4_scaler.pkl
+    - mobilis_v4_columns.pkl
+
+- name: Restart AI engine to load new model
+  become_user: vboxuser
+  shell: docker restart silver_ai_engine
+  args:
+    executable: /bin/bash
+
+- name: Wait for AI engine to start
+  wait_for:
+    timeout: 15
+
+- name: Validate AI engine health
+  uri:
+    url: http://localhost:8001/health
+    method: GET
+    return_content: yes
+    status_code: 200
+  register: health_check
+  retries: 10
+  delay: 5
+  until: health_check.status == 200
+  delegate_to: silver_server
+
+- name: Show AI engine health
+  debug:
+    msg: "AI Engine: {{ health_check.content }}"
+
+- name: Verify threshold is correctly set
+  assert:
+    that:
+      - "'threshold' in health_check.content"
+      - "'model' in health_check.content"
+    fail_msg: "AI engine health check failed"
+    success_msg: "AI engine validated successfully"
