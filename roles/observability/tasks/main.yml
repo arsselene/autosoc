@@ -1,0 +1,167 @@
+---
+- name: Create Grafana directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+    owner: vboxuser
+  loop:
+    - /opt/monitoring
+    - /opt/monitoring/grafana/provisioning/datasources
+    - /opt/monitoring/grafana/provisioning/dashboards
+    - /opt/monitoring/grafana/dashboards
+    - /opt/monitoring/prometheus
+
+- name: Create Prometheus config
+  copy:
+    dest: /opt/monitoring/prometheus/prometheus.yml
+    content: |
+      global:
+        scrape_interval: 15s
+
+      scrape_configs:
+        - job_name: 'silver_soc_ai'
+          static_configs:
+            - targets: ['silver_ai_engine:8000']
+              labels:
+                service: 'ai_engine'
+
+        - job_name: 'silver_soc_dashboard'
+          static_configs:
+            - targets: ['silver_dashboard_backend:8000']
+              labels:
+                service: 'dashboard'
+
+        - job_name: 'node'
+          static_configs:
+            - targets: ['localhost:9100']
+    mode: '0644'
+
+- name: Create Grafana datasource config
+  copy:
+    dest: /opt/monitoring/grafana/provisioning/datasources/prometheus.yml
+    content: |
+      apiVersion: 1
+      datasources:
+        - name: Prometheus
+          type: prometheus
+          url: http://prometheus:9090
+          isDefault: true
+    mode: '0644'
+
+- name: Create Grafana dashboard provisioning config
+  copy:
+    dest: /opt/monitoring/grafana/provisioning/dashboards/default.yml
+    content: |
+      apiVersion: 1
+      providers:
+        - name: 'Silver SOC'
+          folder: 'Silver SOC'
+          type: file
+          options:
+            path: /var/lib/grafana/dashboards
+    mode: '0644'
+
+- name: Create Silver SOC Grafana dashboard
+  copy:
+    dest: /opt/monitoring/grafana/dashboards/silver_soc.json
+    content: |
+      {
+        "title": "Silver SOC Overview",
+        "panels": [
+          {
+            "title": "AI Engine Status",
+            "type": "stat",
+            "targets": [{"expr": "up{service='ai_engine'}"}]
+          },
+          {
+            "title": "Attack Rate",
+            "type": "graph",
+            "targets": [{"expr": "rate(http_requests_total[5m])"}]
+          }
+        ],
+        "refresh": "10s",
+        "time": {"from": "now-1h", "to": "now"}
+      }
+    mode: '0644'
+
+- name: Create monitoring docker-compose
+  copy:
+    dest: /opt/monitoring/docker-compose.yml
+    content: |
+      version: '3.8'
+      networks:
+        silver_net:
+          external: true
+
+      services:
+        prometheus:
+          image: prom/prometheus:latest
+          container_name: silver_prometheus
+          volumes:
+            - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+          ports:
+            - "9090:9090"
+          networks:
+            - silver_net
+          restart: unless-stopped
+
+        grafana:
+          image: grafana/grafana:latest
+          container_name: silver_grafana
+          environment:
+            - GF_SECURITY_ADMIN_PASSWORD=Admin@SOC2025
+            - GF_USERS_ALLOW_SIGN_UP=false
+          volumes:
+            - ./grafana/provisioning:/etc/grafana/provisioning
+            - ./grafana/dashboards:/var/lib/grafana/dashboards
+          ports:
+            - "3000:3000"
+          networks:
+            - silver_net
+          depends_on:
+            - prometheus
+          restart: unless-stopped
+    mode: '0644'
+    owner: vboxuser
+
+- name: Start monitoring stack
+  become_user: vboxuser
+  shell: |
+    cd /opt/monitoring
+    docker compose up -d
+  args:
+    executable: /bin/bash
+
+- name: Wait for Grafana to start
+  wait_for:
+    port: 3000
+    host: localhost
+    timeout: 60
+
+- name: Open Grafana firewall port
+  ufw:
+    rule: allow
+    port: '3000'
+    proto: tcp
+
+- name: Open Prometheus firewall port
+  ufw:
+    rule: allow
+    port: '9090'
+    proto: tcp
+
+- name: Verify Grafana is running
+  uri:
+    url: http://localhost:3000/api/health
+    method: GET
+    status_code: 200
+  register: grafana_health
+  retries: 5
+  delay: 5
+  until: grafana_health.status == 200
+  delegate_to: silver_server
+
+- name: Show Grafana status
+  debug:
+    msg: "Grafana is running at http://{{ ansible_host }}:3000 (admin/Admin@SOC2025)"
