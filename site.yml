@@ -10,3 +10,4 @@
     - docker_stack
     - silver_soc_core
     - ml_engine
+    - observability
