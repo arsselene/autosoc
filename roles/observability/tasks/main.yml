@@ -91,7 +91,7 @@
     content: |
       version: '3.8'
       networks:
-        silver_net:
+        silver_soc_silver_net:
           external: true
 
       services:
@@ -103,7 +103,7 @@
           ports:
             - "9090:9090"
           networks:
-            - silver_net
+            - silver_soc_silver_net
           restart: unless-stopped
 
         grafana:
@@ -118,7 +118,7 @@
           ports:
             - "3000:3000"
           networks:
-            - silver_net
+            - silver_soc_silver_net
           depends_on:
             - prometheus
           restart: unless-stopped
